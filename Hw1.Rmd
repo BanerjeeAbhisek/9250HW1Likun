@@ -1,0 +1,346 @@
+---
+title: "Homework 1"
+author: "Abhisek Banerjee"
+date: "2026-02-08"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Problem 1
+
+## a)
+
+We have a matrix $\Sigma = \sigma I + KK'$ where $K$ is an $N \times M$ matrix having $i.i.d$ $\mathcal{N}(0,1)$ random variables in its element. As given in question, we take $\sigma=0.2$ and fix $M$ at 10. 
+
+```{r}
+M = 10
+sig = 0.2
+```
+
+Looking at my computer condition, I will go with the following grid for $N$.
+
+```{r}
+ns = c(50, 100, 200, 500, 1000, 2000, 3000, 5000)
+```
+
+
+We set a seed for reproducibility
+
+```{r}
+set.seed(12345678)
+```
+
+Two time points storing variable to note the time for the two methods.
+
+```{r}
+t1 = rep(0, length(ns))
+t2 = rep(0, length(ns))
+```
+
+From slide 25 we get the Sherman-Morrison Woodbury formula as 
+
+\[
+(A + UCV)^{-1} = A^{-1} - A^{-1}U(C^{-1} + VA^{-1}U)^{-1}VA^{-1}
+\]
+
+For our problem, $\Sigma = \sigma I + KK^\top$, we note:
+\[
+A = \sigma I, \quad U = K, \quad C = I_M, \quad V = K^\top
+\]
+
+This gives us:
+\[
+A^{-1} = \frac{1}{\sigma}I, \quad C^{-1} = I_M, \quad VA^{-1}U = \frac{1}{\sigma}K^\top K
+\]
+
+Substituting into the SMW formula:
+\[
+\Sigma^{-1} = \frac{1}{\sigma}I - \frac{1}{\sigma}I \cdot K\left(I_M + \frac{1}{\sigma}K^\top K\right)^{-1}K^\top \cdot \frac{1}{\sigma}I
+\]
+
+Simplifying the above we obtain:
+\[
+\Sigma^{-1} = \frac{1}{\sigma}I - \frac{1}{\sigma^2}K\left(I_M + \frac{1}{\sigma}K^\top K\right)^{-1}K^\top
+\]
+
+
+Now,we do matrix inversion wuth method 1 and 2:
+
+```{r}
+for (i in 1:length(ns)) {
+  n = ns[i]
+  K = matrix(rnorm(n * M), nrow = n, ncol = M)
+  S = sig * diag(n) + K %*% t(K)
+  t1[i] = system.time(solve(S))[3]
+  t2[i] = system.time({
+    Ainv = (1/sig) * diag(n)            
+    Cinv = diag(M)                     
+    VAU = t(K) %*% Ainv %*% K           
+    mid = solve(Cinv + VAU)             
+    ans = Ainv - Ainv %*% K %*% mid %*% t(K) %*% Ainv
+  })[3]
+  
+  cat("n =", n, "| solve:", t1[i], "| smw:", t2[i], "\n")
+}
+
+```
+
+
+
+Now we make the plot asked in the question:
+
+```{r}
+plot(ns, t1, type = "b", col = "red", pch = 16,
+     xlab = "N", ylab = "time (s)",
+     main = "CPU Time vs N",
+     ylim = range(c(t1, t2)))
+lines(ns, t2, type = "b", col = "blue", pch = 17)
+legend("topleft", legend = c("solve()", "SMW"),
+       col = c("red", "blue"), pch = c(16, 17), lty = 1)
+
+```
+
+
+## b)
+
+From the pdf on FLOPS uploaded in canvas, "flops of different operations" we calculate the flops for the Sherman Woodbury algorithm as follows:
+
+We compute $\Sigma^{-1} = A^{-1} - A^{-1}U(C^{-1} + VA^{-1}U)^{-1}VA^{-1}$ where $A = \sigma I$, $U = K$, $C = I_M$, $V = K^\top$.
+
+- $A^{-1} = \frac{1}{\sigma}I$: $N$ flops (diagonal inverse)
+- $VA^{-1} = K^\top \cdot \frac{1}{\sigma}I$: $NM$ flops (scale each entry)
+- $VA^{-1}U = (K^\top)(K)$, $(M \times N)(N \times M)$: $2NM^2$ flops
+- $C^{-1} + VA^{-1}U$, $M \times M$ addition: $M^2$ flops
+- Solve $(C^{-1} + VA^{-1}U)^{-1}(VA^{-1})$, i.e. $M \times M$ system applied to $M \times N$ matrix: $M^3 + 2M^2 N$ flops
+- $A^{-1}U = \frac{1}{\sigma}K$: $NM$ flops
+- $(A^{-1}U) \cdot \text{mid result}$, $(N \times M)(M \times N)$: $2N^2 M$ flops
+- Subtract from $A^{-1}$: $N^2$ flops
+
+Total: $N + 2NM + 2NM^2 + M^2 + M^3 + 2M^2N + 2N^2M + N^2$. With $M = 10$ fixed, the dominant term is $2N^2 M = 20N^2$, so the cost is $O(N^2)$.
+
+For the the algorithm with `solve()` function, we solve $N \times N$ giving us $N^3$. The following code in R gives the plot:
+
+```{r}
+f1 = ns^3
+f2 = ns + 2*ns*M + 2*ns*M^2 + M^2 + M^3 + 2*M^2*ns + 2*ns^2*M + ns^2
+plot(ns, f1, type = "b", col = "red", pch = 16, log = "y",
+     xlab = "N", ylab = "Flops",
+     main = "Floating Point Operations vs N",
+     ylim = range(c(f1, f2)))
+lines(ns, f2, type = "b", col = "blue", pch = 17)
+legend("topleft", legend = c("solve()", "SMW"),
+       col = c("red", "blue"), pch = c(16, 17), lty = 1)
+```
+
+## 1c
+
+Looking at the two plots, it seems like, for small $N$, for example untill 2000 the difference in computation time by the two methods is nit that  significant. However as $N$ increases, the difference in computation time increases for both and the difference in time between the two algorithms starts to increase more and more. A similar observation can be seen for the second graph as well, increasing $N$ leads to a steady increase in floating point operations in both, however for the solve function, just like computation time, the floating point operations are way more than the SMW algorithm. This shows that algebric manipulation can significantly reduce computation time and can beat already optimized inbuilt codes in programming languages.   
+
+# Problem 2
+
+We have an already developed a spatio-temporal extreme-value model to estimate the theoretical upper bound of temperature at a given location from historical records at weather stations. The following code shows confirms the dimension of the covariate matrix, the outcome vector and the structure of the weather stations data from the file `Temp_data.RData. In the question it is said to contain a global dataset of temperature upper bounds evaluated at $n = 37511$ weather stations
+
+```{r}
+load("Temp_data.RData")
+dim(Xmat)
+length(Temp_UB)
+head(stations)
+str(stations)
+summary(Temp_UB)
+```
+
+Here we have:
+- $y$ as vector of `Temp_UB`
+- $X$ as the matrix `Xmat` with $p=3535$ columns. 
+- `stations` containing latitutde and longitude of the stations. 
+
+Goal is to approximate high-dim `Temp_UB` field via a basis expansion $$\mathbf{y} \approx \mathbf{X}\boldsymbol{\beta},$$
+where $\beta$ being the coefficients. 
+
+### 1)
+
+I randomly chose two basis functions, $25$ and $386$ and plotted them below. I saw that it is kind of difficult to view with legends being on side of the plots, so I modified the code to put the legends below the plots. 
+
+
+
+```{r}
+library(gridExtra)
+library(ggplot2)
+library(maps)
+
+p1 = ggplot(stations) +
+  geom_point(aes(x = lon, y = lat, col = Xmat[, 25]), size = 0.7) +
+  geom_path(
+    data = map_data("world"),
+    aes(x = long, y = lat, group = group),
+    color = "gray", linewidth = 0.2, alpha = 0.5
+  ) +
+  scale_color_gradientn(
+    colours = terrain.colors(10),
+    name = "Basis #25",
+    na.value = "transparent",
+    limits = c(0, 0.15)
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+p2 = ggplot(stations) +
+  geom_point(aes(x = lon, y = lat, col = Xmat[, 386]), size = 0.7) +
+  geom_path(
+    data = map_data("world"),
+    aes(x = long, y = lat, group = group),
+    color = "gray", linewidth = 0.2, alpha = 0.5
+  ) +
+  scale_color_gradientn(
+    colours = terrain.colors(10),
+    name = "Basis #386",
+    na.value = "transparent",
+    limits = c(0, 0.15)
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+
+grid.arrange(p1, p2, ncol = 2)
+```
+We see from the left plot that basis #25 correspond to the localized bumps near western Alaska and  basis #386 correspond to the localized bumps at southern Canada above the boundary between United States and Canada. 
+
+## 2)
+
+In our context, a local basis function is a column from the matrix `Xmat` which can be used to obtain a bump in a small spatial region. With respect to the figure given in the question, we see that a local basis function #1 activates in a small geographic region and can be seen as a bump near southern Sweden. Similarly from part 1 we see that a basis of 100 leads to a bump in Alaska. In this context, it is also noted that a local basis function is only active in a particular small geographic region and is almost zero everywhere else, which can be seen with green shade. 
+
+
+## 3) 
+
+### a)
+
+We run `solve(t(Xmat)%*%Xmat)` in the following code:
+
+```{r error=TRUE}
+solve(t(Xmat)%*%Xmat)
+```
+
+Upon running the above code, I get the following error, "Error in solve.default(t(Xmat) %*% Xmat) : Lapack routine dgesv: system is exactly singular: U[1362,1362] = 0". This error tells us that $X'X$ is singular here. From Linear Models course we know that a system of linear equation is singular or $(X'X)^{-1}$ doesn't exists if $X$ is not of full column rank. This means all the column vectors in $X$ are not linearly independent. In other words, at least one  column vector can be written as a linear combinition of the others. Here, it simply means `Xmat` has some (at least one) linearly dependent column. We know from part 1, the columns of `Xnew` are localized basis functions. A good reason for very similar columns or local basis functions can occur due to overlapping or being near identical making some redundent. Numerical singualr means that theoretically it is non singular but the values of some colunns maybe so similar that it can lead to extremely small singular values, so small small that R makes it 0. 
+
+
+b) 
+
+We consider the SVD of $X$ as  
+\[
+X_{n \times p} = U_{n \times p}\, D_{p \times p}\, V_{p \times p}^{\top}.
+\]
+Here the columns of $U$ are the eigenarrays. $D$ has the singular values. It is a diagonal matrix with diagonal elements as $\sigma_1 \ge \sigma_2 \ge \dots \ge \sigma_p \ge 0$. We get a plot of the singular values of $X$ as:
+
+```{r}
+s <- svd(Xmat, nu=0, nv=0)$d
+plot(s, type="b", pch=20, xlab="index", ylab="singular
+            value")
+plot(log(s), type="b", pch=20, xlab="index",
+            ylab="singular value in log scale")
+```
+
+From the first plot we see that the singular values of `Xmat` decays very rapidly, we notice that from around 2000 the singular values almost touches 0 sugessting extremely small singular values. Thus we have a very log tail with almost 0 singular values. In the second graph, taking log of singular values make it linear and easy to visualize the small singular values. Since its hard to distinguish between to tiny numbers, for example of order $10^{-9}$, taling log makes it easy to view as log makes it around -20. We see from the second plot that there are singular values whose log is around -40, this means ther are of order $\exp (-40)$. This is extremeply small. Considering $U$ and $V$ to be orthogonal matrices, now we have  \[
+X = U D V^\top,
+\qquad
+D = \mathrm{diag}(\sigma_1,\ldots,\sigma_p),
+\quad
+\sigma_1 \ge \cdots \ge \sigma_p > 0 .
+\]
+Now, if we calculate $X^\top X$, we get:
+\[
+X^\top X
+=
+(VD U^\top)^\top (UD V^\top)
+=
+VD^\top D V^\top
+=
+V\,\mathrm{diag}(\sigma_1^2,\ldots,\sigma_p^2)\,V^\top.
+\]
+Now ,
+\[
+(X^\top X)^{-1}
+=
+V\,\mathrm{diag}\!\left(\frac{1}{\sigma_1^2},\ldots,\frac{1}{\sigma_r^2}\right)V^\top.
+\]
+
+Here, if $\sigma_i$ for different $i$ in $1,..,p$ are very small, almost zero, this makes $\frac{1}{\sigma_1}$ almost infinity causing instability in inverse problems. 
+
+## 4)
+
+Using the `svd()` function in R we can compute $V,\Sigma^+$ and $U$. 
+
+```{r}
+s = svd(Xmat)       
+d = s$d
+```
+
+We have y as our `Temp_UB`. Now we plug-in these in the formula $\hat{\beta}_{\text{svd}}= V\Sigma^+U^\top y.$ Herewe print the first five values of $\hat{\beta}_{\text{svd}}$   
+
+```{r}
+y= Temp_UB
+b = s$v %*% ( (t(s$u) %*% y) / d )
+head(b)
+```
+
+We know $\hat y = X \hat{\beta}_{\text{svd}}$, Next we plot using the code already given in (1).
+   
+```{r}
+
+
+# reconstruction: yhat = X b
+yh = as.vector(Xmat %*% b)
+
+# plot like the top-right panel (reconstruction)
+p = ggplot(stations) +
+  geom_point(aes(x = lon, y = lat, col = yh), size = 0.7) +
+  geom_path(data = map_data("world"),
+            aes(x = long, y = lat, group = group),
+            color = "gray", linewidth = 0.2, alpha = 0.5) +
+  scale_color_gradientn(colours = terrain.colors(10), name = "yh",
+                        na.value = "transparent") +
+  coord_fixed() +
+  theme_bw()
+
+p
+```
+
+It looks from the above plot that, the SVD approach was able to capture the spatial structure of the temperature upper bound for most of the areas. In the Great Plains region of U.S., since it is a relatively homogeneous area with similar altitude everywhere, the reconstruction by SVD appears reasonable as temperature variation is smooth and aligned with localized basis functions we saw in Figure 1. However, in the Rocky Mountain regions, where altitude varies and temperature fluctuates rapidly from region to region, the reconstruction quality seems to be weaker and deviates from top left figure in Figure 1.  
+
+From Linear models class we know, $X \hat{\beta}_{\text{svd}}$ is the orthogonal projection of $y$ onto the span of $X$. Since the small-scale noise from measurement error are not represented by this basis, these are automatically filtered out in this approach.
+
+
+### b)
+
+The following figure shows the histograms of $\hat{\beta}_{\text{svd}}$ and residuals. 
+
+
+```{r}
+r = as.vector(y - yh)
+par(mfrow=c(1,2))
+hist(b, breaks=60, main="Histogram of beta_svd", xlab="beta_svd", col="gray")
+hist(r, breaks=60, main="Histogram of residuals", xlab="r = y - X beta_svd", col="gray")
+par(mfrow=c(1,1))
+```
+
+
+### c)
+
+We say that $$\hat\beta_{\mathrm{svd}} = V\Sigma^{+}U^\top y,
+\qquad
+\Sigma^{+}=\mathrm{diag}\!\left(\frac{1}{\sigma_i}\right),$$
+
+Here, if the values of $\sigma_i$ are very small then $\frac{1}{\sigma_i}$ will have very very large values, these crazy large values, when multiplied with the rest in $V\Sigma^{+}U^\top y$ makes $\hat\beta_{\mathrm{svd}}$ to almost explode and we just saw it became as large as $1 \exp(17)$. But $X \hat\beta_{\mathrm{svd}}$ on the other hand does not show that crazy high values, which makes the residuals lie almost around $-20$ and $10$. This happens because, for small $\sigma_i$ values, these coefficients contribute little to $X \hat\beta_{\mathrm{svd}}$. These coefficients contribute near the nullspace of X, hence when multiplied with $X$, it does not contribute much to $\hat y$ and their magnifying effect is not seen. 
+
+## 5) 
+
+
+
+
+
+
