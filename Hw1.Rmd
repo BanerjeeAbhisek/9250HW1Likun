@@ -519,8 +519,7 @@ par(mfrow=c(1,1))
 Here we see that the coefficients magnitude range has shrunk further for the rigge procedure than the truncated SVD procedure but this led to a very slight increase in RMSE. 
 
 
-
-hello
+## Problem 3
 
 
 
