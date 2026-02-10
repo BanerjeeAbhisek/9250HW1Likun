@@ -521,6 +521,157 @@ Here we see that the coefficients magnitude range has shrunk further for the rig
 
 ## Problem 3
 
+```{r warning=FALSE}
+## =============================================================
+## Problem 3: Simulation Study - MLE vs MoM for Gamma(alpha, beta)
+## True: alpha = 3, beta = 7, so E[X] = alpha*beta = 21
+## =============================================================
+
+library(MASS)  # needed for fitdistr()
+
+set.seed(123)  # for reproducibility
+
+# --- True parameters ---
+alpha_true <- 3
+beta_true  <- 7
+
+# --- Simulation settings ---
+n_grid <- c(20, 50, 100, 200, 500, 1000)  # sample sizes to try
+B      <- 1000                              # number of simulations per n
+
+# --- Storage vectors ---
+mle_bias_alpha <- mle_bias_beta <- numeric(length(n_grid))
+mle_mse_alpha  <- mle_mse_beta  <- numeric(length(n_grid))
+mom_bias_alpha <- mom_bias_beta <- numeric(length(n_grid))
+mom_mse_alpha  <- mom_mse_beta  <- numeric(length(n_grid))
+
+# --- Main simulation loop ---
+for (i in seq_along(n_grid)) {
+  n <- n_grid[i]
+  
+  # Vectors to hold B estimates for this sample size
+  mle_a <- mle_b <- numeric(B)
+  mom_a <- mom_b <- numeric(B)
+  
+  for (j in 1:B) {
+    # Step 1: Generate a random sample from Gamma(shape=3, scale=7)
+    x <- rgamma(n, shape = alpha_true, scale = beta_true)
+    
+    # Step 2: Method of Moments estimators
+    # For Gamma: E[X] = alpha*beta, Var[X] = alpha*beta^2
+    # Solving: alpha_hat = xbar^2 / s^2,  beta_hat = s^2 / xbar
+    xbar <- mean(x)
+    s2   <- var(x)
+    mom_a[j] <- xbar^2 / s2   # alpha hat (MoM)
+    mom_b[j] <- s2 / xbar     # beta hat (MoM)
+    
+    # Step 3: MLE using fitdistr
+    # Note: fitdistr fits shape and RATE (not scale)
+    # So beta_hat_MLE = 1 / rate_hat
+    fit <- fitdistr(x, "gamma")
+    mle_a[j] <- fit$estimate["shape"]
+    mle_b[j] <- 1 / fit$estimate["rate"]  # convert rate to scale
+  }
+  
+  # Step 4: Compute Bias = mean(estimates) - true value
+  mle_bias_alpha[i] <- mean(mle_a) - alpha_true
+  mle_bias_beta[i]  <- mean(mle_b) - beta_true
+  mom_bias_alpha[i] <- mean(mom_a) - alpha_true
+  mom_bias_beta[i]  <- mean(mom_b) - beta_true
+  
+  # Step 5: Compute MSE = mean((estimates - true value)^2)
+  mle_mse_alpha[i] <- mean((mle_a - alpha_true)^2)
+  mle_mse_beta[i]  <- mean((mle_b - beta_true)^2)
+  mom_mse_alpha[i] <- mean((mom_a - alpha_true)^2)
+  mom_mse_beta[i]  <- mean((mom_b - beta_true)^2)
+}
+
+# --- Print results table ---
+results <- data.frame(
+  n = n_grid,
+  MLE_Bias_alpha = round(mle_bias_alpha, 4),
+  MoM_Bias_alpha = round(mom_bias_alpha, 4),
+  MLE_MSE_alpha  = round(mle_mse_alpha, 4),
+  MoM_MSE_alpha  = round(mom_mse_alpha, 4),
+  MLE_Bias_beta  = round(mle_bias_beta, 4),
+  MoM_Bias_beta  = round(mom_bias_beta, 4),
+  MLE_MSE_beta   = round(mle_mse_beta, 4),
+  MoM_MSE_beta   = round(mom_mse_beta, 4)
+)
+print(results)
+
+# --- Plotting (2x2 panel) ---
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+
+# Plot 1: Bias of alpha
+plot(n_grid, mle_bias_alpha, type = "b", col = "blue", pch = 16,
+     xlab = "Sample size (n)", ylab = "Bias", main = "Bias of alpha hat")
+lines(n_grid, mom_bias_alpha, type = "b", col = "red", pch = 17)
+abline(h = 0, lty = 2)
+legend("topright", legend = c("MLE", "MoM"), col = c("blue", "red"),
+       pch = c(16, 17), lty = 1, cex = 0.8)
+
+# Plot 2: Bias of beta
+plot(n_grid, mle_bias_beta, type = "b", col = "blue", pch = 16,
+     xlab = "Sample size (n)", ylab = "Bias", main = "Bias of beta hat")
+lines(n_grid, mom_bias_beta, type = "b", col = "red", pch = 17)
+abline(h = 0, lty = 2)
+legend("topright", legend = c("MLE", "MoM"), col = c("blue", "red"),
+       pch = c(16, 17), lty = 1, cex = 0.8)
+
+# Plot 3: MSE of alpha
+plot(n_grid, mle_mse_alpha, type = "b", col = "blue", pch = 16,
+     xlab = "Sample size (n)", ylab = "MSE", main = "MSE of alpha hat")
+lines(n_grid, mom_mse_alpha, type = "b", col = "red", pch = 17)
+legend("topright", legend = c("MLE", "MoM"), col = c("blue", "red"),
+       pch = c(16, 17), lty = 1, cex = 0.8)
+
+# Plot 4: MSE of beta
+plot(n_grid, mle_mse_beta, type = "b", col = "blue", pch = 16,
+     xlab = "Sample size (n)", ylab = "MSE", main = "MSE of beta hat")
+lines(n_grid, mom_mse_beta, type = "b", col = "red", pch = 17)
+legend("topright", legend = c("MLE", "MoM"), col = c("blue", "red"),
+       pch = c(16, 17), lty = 1, cex = 0.8)
+```
+
+Both MLE and MoM are positively biased for $\alpha$ and negatively biased for $\beta$ especially at small $n$. As $n$ increases, both biases shrink toward $0$. This confirms both estimators are consistent. MLE has slightly larger bias for $\alpha$ at $n=20$ ($0.55$ vs.\ $0.49$), but the difference is small and disappears quickly. For MSE, it decreases as $n$ grows for both methods, again confirming consistency. Also, MLE has smaller MSE than MoM at every sample size.
+$$
+    \mathrm{MLE\_MSE}_{\alpha}=1.94 \quad \text{vs.} \quad \mathrm{MoM\_MSE}_{\alpha}=2.00,
+$$
+  and the gap is more visible for $\beta$:
+$$ 
+    \mathrm{MLE\_MSE}_{\beta}=5.42 \quad \text{vs.} \quad \mathrm{MoM\_MSE}_{\beta}=7.05.
+$$
+This means MLE is more efficient, it gives more precise estimates on average.
+
+The reason why MLE is better than MoM in this case, MLE uses the full likelihood, while MoM only matches mean and variance. MLE is asymptotically efficient, meaning it achieves the lowest possible MSE among consistent estimators as $n \to \infty$. MoM does not have this property.
+
+Both methods work and improve with larger samples, but MLE is the better choice --- it has lower MSE, meaning more accurate estimates overall. The advantage is most noticeable at small sample sizes and for the $\beta$ (scale) parameter.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
