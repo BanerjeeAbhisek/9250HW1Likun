@@ -650,7 +650,260 @@ Both methods work and improve with larger samples, but MLE is the better choice 
 
 
 
+## problem 4
 
+We generate random covariance matrices: simulate an $m \times m$ matrix $R$ with i.i.d. $N(0,1)$ entries, then form $\Sigma = RR^T$. This gives a Wishart distribution $W_m(I_m, m)$.
+
+
+### Part (1): Expected Value of trace($\Sigma$)
+
+**Analytical derivation:**
+
+$$\text{trace}(\Sigma) = \text{trace}(RR^T) = \sum_{i=1}^{m} \sum_{j=1}^{m} R_{ij}^2$$
+
+Each $R_{ij} \sim N(0,1)$, so $R_{ij}^2 \sim \chi^2(1)$ and $E[R_{ij}^2] = 1$.
+
+There are $m^2$ such terms, so:
+
+$$E[\text{trace}(\Sigma)] = m^2$$
+
+For $m = 100$: $E[\text{trace}] = 10{,}000$. For $m = 1000$: $E[\text{trace}] = 1{,}000{,}000$.
+
+**Simulation for m = 100:**
+
+```{r part1_m100}
+set.seed(42)
+m <- 100
+B <- 500  # number of Monte Carlo replicates
+
+trace_vals <- numeric(B)
+for (i in 1:B) {
+  R <- matrix(rnorm(m * m), nrow = m, ncol = m)
+  # trace(RR^T) = sum of all squared entries
+  trace_vals[i] <- sum(R^2)
+}
+
+mc_mean <- mean(trace_vals)
+mc_se   <- sd(trace_vals) / sqrt(B)
+
+cat("m = 100\n")
+cat("Analytical E[trace] =", m^2, "\n")
+cat("MC estimate         =", round(mc_mean, 2), "\n")
+cat("MC standard error   =", round(mc_se, 2), "\n")
+cat("Sample size B       =", B, "\n")
+
+plot(density(trace_vals), main = "Density of trace(Sigma), m = 100",
+     xlab = "trace(Sigma)", col = "blue", lwd = 2)
+abline(v = m^2, col = "red", lty = 2, lwd = 2)
+legend("topright", legend = c("MC density", "True E[trace]"),
+       col = c("blue", "red"), lty = c(1, 2), lwd = 2, cex = 0.8)
+```
+
+**Simulation for m = 1000:**
+
+```{r part1_m1000}
+set.seed(42)
+m <- 1000
+B <- 100  # fewer reps since m=1000 is expensive
+
+trace_vals <- numeric(B)
+for (i in 1:B) {
+  R <- matrix(rnorm(m * m), nrow = m, ncol = m)
+  trace_vals[i] <- sum(R^2)
+}
+
+mc_mean <- mean(trace_vals)
+mc_se   <- sd(trace_vals) / sqrt(B)
+
+cat("m = 1000\n")
+cat("Analytical E[trace] =", m^2, "\n")
+cat("MC estimate         =", round(mc_mean, 2), "\n")
+cat("MC standard error   =", round(mc_se, 2), "\n")
+cat("Sample size B       =", B, "\n")
+
+plot(density(trace_vals), main = "Density of trace(Sigma), m = 1000",
+     xlab = "trace(Sigma)", col = "blue", lwd = 2)
+abline(v = m^2, col = "red", lty = 2, lwd = 2)
+legend("topright", legend = c("MC density", "True E[trace]"),
+       col = c("blue", "red"), lty = c(1, 2), lwd = 2, cex = 0.8)
+```
+The Monte Carlo results closely match the analytical expectation $\mathbb{E}\{\mathrm{tr}(\Sigma)\}=m^2$.
+For $m=100$, the MC estimate is $10000.41$ (true value $=10000$) with MC standard error $6.12$ using $B=500$ replicates.
+For $m=1000$, the MC estimate is $1000132$ (true value $=10^6$) with MC standard error $163.1$ using $B=100$ replicates.
+In both cases, the true expectation (red dashed line) lies near the center of the estimated density, indicating negligible Monte Carlo bias.
+
+The density is approximately bell-shaped, which is consistent with the fact that
+$$
+\mathrm{tr}(\Sigma)=\sum_{i=1}^m\sum_{j=1}^m R_{ij}^2 \sim \chi^2_{m^2},
+$$
+and for large degrees of freedom a chi-square distribution is well-approximated by a normal distribution (CLT).
+Moreover, although the mean grows as $m^2$, the distribution becomes relatively more concentrated as $m$ increases: the relative MC standard errors are $\frac{6.12}{10000}\approx 6.1\times 10^{-4}$,$\frac{163.1}{10^6}\approx 1.6\times 10^{-4}$ showing higher precision (in relative terms) for larger $m$.
+
+### Part (2): Largest Eigenvalue of $\Sigma$
+
+For the largest eigenvalue, there is no simple closed-form expectation. By the Tracy-Widom law, for a Wishart matrix $W_m(I, m)$, the largest eigenvalue is approximately $(\sqrt{m} + \sqrt{m})^2 = 4m$ (using the Marchenko-Pastur result when $n = m$, so the ratio $p/n = 1$, giving upper edge at $(\sqrt{1}+1)^2 \cdot m = 4m$).
+
+We approximate it by simulation.
+
+**Simulation for m = 100:**
+
+```{r part2_m100}
+set.seed(42)
+m <- 100
+B <- 200
+
+max_eig <- numeric(B)
+for (i in 1:B) {
+  R <- matrix(rnorm(m * m), nrow = m, ncol = m)
+  Sigma <- R %*% t(R)
+  # Only need the largest eigenvalue; use symmetric=TRUE for speed
+  max_eig[i] <- max(eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values)
+}
+
+mc_mean <- mean(max_eig)
+mc_se   <- sd(max_eig) / sqrt(B)
+
+cat("m = 100\n")
+cat("MC estimate of E[lambda_1] =", round(mc_mean, 2), "\n")
+cat("MC standard error           =", round(mc_se, 2), "\n")
+cat("Sample size B               =", B, "\n")
+
+plot(density(max_eig), main = "Density of Largest Eigenvalue, m = 100",
+     xlab = "Largest eigenvalue", col = "blue", lwd = 2)
+abline(v = mc_mean, col = "red", lty = 2, lwd = 2)
+legend("topright", legend = c("MC density", "MC mean"),
+       col = c("blue", "red"), lty = c(1, 2), lwd = 2, cex = 0.8)
+```
+
+**Simulation for m = 1000:**
+
+```{r part2_m1000}
+set.seed(42)
+m <- 1000
+B <- 20  # small B because eigendecomposition of 1000x1000 is expensive
+
+max_eig <- numeric(B)
+for (i in 1:B) {
+  R <- matrix(rnorm(m * m), nrow = m, ncol = m)
+  Sigma <- R %*% t(R)
+  max_eig[i] <- max(eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values)
+}
+
+mc_mean <- mean(max_eig)
+mc_se   <- sd(max_eig) / sqrt(B)
+
+cat("m = 1000\n")
+cat("MC estimate of E[lambda_1] =", round(mc_mean, 2), "\n")
+cat("MC standard error           =", round(mc_se, 2), "\n")
+cat("Sample size B               =", B, "\n")
+
+plot(density(max_eig), main = "Density of Largest Eigenvalue, m = 1000",
+     xlab = "Largest eigenvalue", col = "blue", lwd = 2)
+abline(v = mc_mean, col = "red", lty = 2, lwd = 2)
+legend("topright", legend = c("MC density", "MC mean"),
+       col = c("blue", "red"), lty = c(1, 2), lwd = 2, cex = 0.8)
+```
+
+There is no simple closed-form expression for $\mathbb{E}(\lambda_1)$, so we approximate it via Monte Carlo simulation.
+For $m=100$, the Monte Carlo estimate is $\widehat{\mathbb{E}}(\lambda_1)=384.71$ with MC standard error $1.05$ using $B=200$ replicates.
+For $m=1000$, the estimate is $\widehat{\mathbb{E}}(\lambda_1)=3973.66$ with MC standard error $7.53$ using $B=20$ replicates.
+
+The density plots show that the distribution of $\lambda_1$ is unimodal and slightly right-skewed, reflecting that the largest eigenvalue is an extreme-value-type statistic and can occasionally take unusually large values.
+As $m$ increases from $100$ to $1000$, the typical size of $\lambda_1$ increases substantially (from around $3.85\times 10^2$ to about $3.97\times 10^3$), consistent with random matrix theory intuition that the top eigenvalue grows on the order of $m$ for Wishart matrices.
+
+As a rough theoretical benchmark, for $\Sigma \sim W_m(I_m,m)$ (i.e., $n=m$ and population covariance $I_m$), the Marchenko--Pastur upper spectral edge suggests $\lambda_1$ should be close to $(\sqrt{m}+\sqrt{m})^2 = 4m.$
+Indeed, $4m=400$ when $m=100$ and $4m=4000$ when $m=1000$, which are close to the Monte Carlo means ($384.71$ and $3973.66$). This agreement supports that our simulation is producing reasonable values for the largest eigenvalue and that $\mathbb{E}(\lambda_1)$ scales approximately linearly with $m$.
+
+
+### Part (3): E(lambda_1) as a function of m
+
+#### (a) & (b): Plot and grid of m values
+
+```{r part3}
+set.seed(42)
+m_grid <- c(10, 25, 50, 100, 200, 500, 1000)
+B_vec  <- c(200, 200, 200, 100, 50, 20, 10)  # fewer reps for larger m
+
+mean_max_eig <- numeric(length(m_grid))
+se_max_eig   <- numeric(length(m_grid))
+
+for (k in seq_along(m_grid)) {
+  m <- m_grid[k]
+  B <- B_vec[k]
+  eigs <- numeric(B)
+  
+  for (i in 1:B) {
+    R <- matrix(rnorm(m * m), nrow = m, ncol = m)
+    Sigma <- R %*% t(R)
+    eigs[i] <- max(eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values)
+  }
+  
+  mean_max_eig[k] <- mean(eigs)
+  se_max_eig[k]   <- sd(eigs) / sqrt(B)
+}
+
+# Results table
+results <- data.frame(
+  m = m_grid,
+  B = B_vec,
+  E_lambda1 = round(mean_max_eig, 2),
+  MC_SE     = round(se_max_eig, 2)
+)
+print(results)
+
+# Plot
+plot(m_grid, mean_max_eig, type = "b", col = "blue", pch = 16, lwd = 2,
+     xlab = "m (matrix dimension)", ylab = "Approximate E(lambda_1)",
+     main = "Expected Largest Eigenvalue vs m")
+
+# Add theoretical reference line: E[lambda_1] ≈ 4m for Wishart(I, m)
+lines(m_grid, 4 * m_grid, col = "red", lty = 2, lwd = 2)
+legend("topleft", legend = c("MC estimate", "4m reference"),
+       col = c("blue", "red"), lty = c(1, 2), pch = c(16, NA), lwd = 2, cex = 0.8)
+```
+
+
+
+From the Monte Carlo table, we estimated $E(\lambda_1)$ on the grid  
+$m \in \{10, 25, 50, 100, 200, 500, 1000\}$, using fewer replicates $B$ for larger $m$ to keep computation feasible (from $B=200$ at small $m$ down to $B=10$ at $m=1000$).
+
+The estimated $E(\lambda_1)$ increases monotonically with $m$ and is approximately linear. For example, it rises from $32.28$ at $m=10$ to $3965.72$ at $m=1000$. The plot shows the Monte Carlo curve matches the theoretical reference line $4m$ very closely, which is consistent with the Marchenko--Pastur upper-edge heuristic for $\Sigma \sim W_m(I_m, m)$, where $\lambda_1$ is expected to be near $(\sqrt{m}+\sqrt{m})^2 = 4m$.
+
+Across all $m$, the estimates are slightly below $4m$ (e.g., $3965.72$ vs.\ $4000$ when $m=1000$), which is reasonable for finite $m$ due to random fluctuations of the extreme eigenvalue.
+
+Monte Carlo standard errors increase in absolute size for larger $m$ mainly because we used smaller $B$. However, the relative Monte Carlo error remains small; for $m=1000$, $12.73/3965.72 \approx 0.0032$, so the linear trend and the agreement with the $4m$ benchmark are still clearly supported.
+
+**Largest $m$ used:** The largest dimension considered here is $m=1000$. The main limitation is computational cost, since forming $\Sigma = RR^T$ and computing the largest eigenvalue both scale on the order of $m^3$ per replicate.
+
+#### (c) Largest m value
+
+```{r part3c}
+cat("Largest m value used:", max(m_grid), "\n")
+```
+
+The largest $m$ for which we approximated the expectation is $m = 1000$. The limiting factor is computation time: forming $\Sigma = RR^T$ costs $O(m^3)$ flops, and eigendecomposition also costs $O(m^3)$.
+
+
+
+### Part (4): Computational Complexity
+
+For a single Monte Carlo replicate at dimension $m$:
+
+1. **Generate R**: $m^2$ random normal draws $\rightarrow O(m^2)$
+2. **Compute $\Sigma = RR^T$**: Matrix multiplication of $m \times m$ by $m \times m$ $\rightarrow O(m^3)$ flops (specifically about $2m^3$ flops)
+3. **Eigendecomposition of $\Sigma$**: $O(m^3)$ flops
+
+So **one replicate** costs $O(m^3)$ flops.
+
+Over $B$ Monte Carlo replicates, the **total cost** is:
+
+$$O(B \cdot m^3) \text{ flops}$$
+
+If we do this for multiple $m$ values on a grid $\{m_1, m_2, \ldots, m_K\}$, the total cost is:
+
+$$\sum_{k=1}^{K} B_k \cdot O(m_k^3)$$
+
+The dominant cost comes from the largest $m$ value. For $m = 1000$ with $B = 10$ replicates, that is roughly $10 \times 2 \times (1000)^3 = 2 \times 10^{10}$ flops.
 
 
 
