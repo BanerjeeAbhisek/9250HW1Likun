@@ -908,11 +908,45 @@ The dominant cost comes from the largest $m$ value. For $m = 1000$ with $B = 10$
 
 
 
+## Problem 6
+
+We consider the data matrix at `Mat.dat`. We need to compute the means of the first and third columns. 
+
+### 1) We take the transpose of the matrix using python.
+
+```{python}
+import numpy as np
+X = np.loadtxt("Mat.dat")
+X_T = X.T
+np.savetxt("Mat_transposed.dat", X_T)
+```
 
 
+Now we read the transposed matrix into R and carry out the necessary calculations in R
 
 
+```{r}
+X_T <- as.matrix(read.table("Mat_transposed.dat"))
+mean_col1 <- mean(X_T[1, ])
+mean_col3 <- mean(X_T[3, ])
+mean_col1
+mean_col3
+```
 
+### 2)
+
+Now we use python to do the entire calculation without reading the matrix into R
+
+```{python}
+import numpy as np
+X = np.loadtxt("Mat.dat")
+mean_col1_py = np.mean(X[:, 0])
+mean_col3_py = np.mean(X[:, 2])
+mean_col1_py, mean_col3_py
+```
+
+
+We see that in part 1 we got 0.0447586 and  0.620249 as means for first and third columns respectively. And in part 2 we get 0.0447586 and 0.620249 which are the same values as obtained in part 1. 
 
 
 
