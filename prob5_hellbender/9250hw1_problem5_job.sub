@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH --job-name=9250hw1_prob5_optimize
+#SBATCH --ntasks=64
+#SBATCH --nodes=1
+#SBATCH --time=0-00:30:00
+#SBATCH --mail-user=mjd4d@umsystem.edu
+#SBATCH --mail-type=FAIL,END
+#SBATCH --export=all
+#SBATCH --out=Hellbender-%j.out
+
+# Load R module 
+module load r/4.4.0
+
+# Run the R script
+Rscript 9250hw1_problem5_hellbender.R
