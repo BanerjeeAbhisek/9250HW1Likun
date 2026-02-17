@@ -899,7 +899,7 @@ The dominant cost comes from the largest $m$ value. For $m = 1000$ with $B = 10$
 
 
 
-## Problem 5
+# Problem 5
 
 All code was run on the Hellbender HPC cluster at the University of Missouri. The SLURM job script and output file (`Hellbender-12537107.out`) are included with this submission.
 
@@ -1023,7 +1023,7 @@ Rscript 9250hw1_problem5_hellbender.R
 
 We consider the data matrix at `Mat.dat`. We need to compute the means of the first and third columns. 
 
-# 1)
+## 1)
 
 ```{python}
 import numpy as np
@@ -1044,7 +1044,7 @@ mean_col1
 mean_col3
 ```
 
-# 2)
+## 2)
 
 Now we use python to do the entire calculation without reading the matrix into R
 
